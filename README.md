@@ -1,2 +1,2 @@
 # comaisci
-Congreso Macro Regional
+Congreso Macro Regional de Ingenieria de Sistemas
