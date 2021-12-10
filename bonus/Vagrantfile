@@ -1,0 +1,79 @@
+PROVEEDOR = "virtualbox"
+NOMBRE_IMAGEN = "bento/ubuntu-20.04"
+#NI = 'en0: Ethernet'
+NI = 'eno2'
+IPBASE = "192.168.3."
+IPMASTER = 200
+INTERFACE = "eth1"
+N = 2
+
+Vagrant.configure("2") do |config|
+    config.ssh.insert_key = false
+
+    config.vm.provider PROVEEDOR do |v|
+        v.memory = 2048
+        v.cpus = 2
+    end
+
+    config.vm.define "kmaster" do |master|
+
+        master.vm.box = NOMBRE_IMAGEN
+        #master.vm.network "private_network", ip: IPBASE + "#{IPMASTER}"
+        master.vm.network "public_network", bridge: NI, ip: IPBASE + "#{IPMASTER}" 
+        master.vm.hostname = "kmaster"
+
+        master.vm.provider PROVEEDOR do |vb|
+            vb.customize ["modifyvm", :id, "--memory", "4096"]
+        end
+
+        master.vm.provision "ansible" do |ansible|
+            ansible.playbook = "kubernetes-setup/comun-playbook.yaml"
+            ansible.extra_vars = {
+                node_ip: IPBASE + "#{IPMASTER}"
+            }
+        end
+
+        master.vm.provision "ansible" do |ansible|
+            ansible.playbook = "kubernetes-setup/master-playbook.yaml"
+            ansible.extra_vars = {
+                node_ip: IPBASE + "#{IPMASTER}",
+                interface: INTERFACE
+            }
+        end
+
+    end
+
+    (1..N).each do |i|
+        config.vm.define "knode#{i}" do |node|
+
+            node.vm.box = NOMBRE_IMAGEN
+            #node.vm.network "private_network", ip: IPBASE + "#{IPMASTER + i + 10}"
+            node.vm.network "public_network", bridge: NI, ip: IPBASE + "#{IPMASTER + i + 10}" 
+            node.vm.hostname = "knode#{i}"
+
+            node.vm.provision "ansible" do |ansible|
+                ansible.playbook = "kubernetes-setup/comun-playbook.yaml"
+                ansible.extra_vars = {
+                    node_ip: IPBASE + "#{IPMASTER + i + 10}"
+                }
+            end
+
+            node.vm.provision "ansible" do |ansible|
+                ansible.playbook = "kubernetes-setup/nodo-playbook.yaml"
+            end
+
+        end
+    end
+
+    #config.vm.define "nfs-server" do |nfs|
+    #  nfs.vm.box = NOMBRE_IMAGEN
+    #  nfs.vm.hostname = "nfs-server"
+    #  nfs.vm.network "private_network", ip: "192.168.50.20"
+    #  # nfs.vm.synced_folder "/Users/yosel/Temporal/datosk8s/", "/srv/nfs"
+    #
+    #  nfs.vm.provision "ansible" do |ansible|
+    #    ansible.playbook = "kubernetes-setup/nfs-playbook.yml"
+    #  end
+    #end
+
+end

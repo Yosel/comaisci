@@ -1,0 +1,40 @@
+---
+- hosts: all
+  become: true
+  tasks:
+  - name: Instalar paquetes que permiten a apt ser usado sobre https
+    apt:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg-agent
+      - software-properties-common
+
+  - name: Instalar servidor nfs
+    apt:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+      - nfs-common
+      - nfs-kernel-server
+
+  - name: Configurar directorio nfs
+    command: "{{ item }}"
+    with_items:
+    - mkdir -p /srv/nfs/general
+    - chown nobody:nogroup /srv/nfs/general
+
+  - name: copy /etc/exports
+    template: src=exports.j2 dest=/etc/exports owner=root group=root
+
+  - name: restart nfs server
+    service: name=nfs-kernel-server state=restarted
+
+  

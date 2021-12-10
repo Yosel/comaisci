@@ -1,0 +1,46 @@
+---
+- hosts: all
+  become: true
+  tasks:
+  - name: Iniciar cluster Kubernetes usando kubeadm
+    command: kubeadm init --control-plane-endpoint={{ node_ip }} --apiserver-advertise-address={{ node_ip }} --apiserver-cert-extra-sans={{ node_ip }} --node-name kmaster --pod-network-cidr=192.168.0.0/16
+
+  - name: Configurar kubeconfig
+    command: "{{ item }}"
+    with_items:
+    - mkdir -p /home/vagrant/.kube
+    - chown vagrant:vagrant /home/vagrant/.kube
+    - cp -i /etc/kubernetes/admin.conf /home/vagrant/.kube/config
+    - chown vagrant:vagrant /home/vagrant/.kube/config
+
+  - name: Instalar operador redes calico
+    become: false
+    command: kubectl apply -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
+
+  - name: Obtener custom-resources para calico
+    become: false
+    command: wget https://docs.projectcalico.org/manifests/custom-resources.yaml
+
+  - name: Insertar linea 1 ipv4 configuracion calico.
+    lineinfile:
+      path: custom-resources.yaml
+      line: '    nodeAddressAutodetectionV4:'
+      insertafter: '      nodeSelector: all()'
+  
+  - name: Insertar linea 2 ipv4 configuracion calico.
+    lineinfile:
+      path: custom-resources.yaml
+      line: '      interface: {{ interface }}'
+      insertafter: '    nodeAddressAutodetectionV4:'
+
+  - name: Instalar custom-resources para calico
+    become: false
+    command: kubectl apply -f custom-resources.yaml
+
+  - name: Generar el comando para unir los nodos del cluster
+    command: kubeadm token create --print-join-command
+    register: join_command
+
+  - name: Copiar comando a un archivo local
+    become: false
+    local_action: copy content="{{ join_command.stdout_lines[0] }}" dest="./join-command"

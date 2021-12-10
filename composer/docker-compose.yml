@@ -1,0 +1,54 @@
+version: '3'
+services:
+
+  web: 
+    image: nginx:latest
+    ports: 
+      - "81:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/nginx.conf
+      - ./api:/usr/src/app/api
+      - ./web:/usr/src/app/web
+      - ./_soporte/adminer:/usr/src/app/adminer
+  
+  vue:
+    build:
+      context: .
+      dockerfile: vue.Dockerfile
+    environment: 
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./web:/usr/src/app/web
+      - nodemodules:/usr/src/app/web/node_modules
+
+  php:
+    build:
+      context: .
+      dockerfile: php.Dockerfile
+    volumes:
+      - ./api:/usr/src/app/api
+      - ./web:/usr/src/app/web
+      - ./_soporte/adminer:/usr/src/app/adminer
+
+  mysql:
+    image: mariadb:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: 'Y0selito'
+      MYSQL_USER: 'yosel'
+      MYSQL_PASSWORD: 'Y0selito'
+      MYSQL_DATABASE: 'asadmin'
+    volumes:
+      - mysqldata:/var/lib/mysql
+    ports:
+      - 3306:3306
+
+volumes:
+  nodemodules: {}
+  mysqldata: {}
+
+networks:
+  default:
+    external: true
+    name: asred

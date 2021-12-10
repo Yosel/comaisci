@@ -1,0 +1,10 @@
+---
+- hosts: all
+  become: true
+  tasks:
+
+  - name: Copiar el comando de union al cluster
+    copy: src=join-command dest=/tmp/join-command.sh mode=0777
+
+  - name: Unir el nodo al cluster
+    command: sh /tmp/join-command.sh

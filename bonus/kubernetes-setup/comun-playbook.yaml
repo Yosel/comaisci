@@ -1,0 +1,122 @@
+---
+- hosts: all
+  become: true
+  tasks:
+
+  - name: Remover swapfile de /etc/fstab
+    mount:
+      name: "{{ item }}"
+      fstype: swap
+      state: absent
+    with_items:
+    - swap
+    - none
+
+  - name: Deshabilitar swap
+    command: swapoff -a
+    when: ansible_swaptotal_mb > 0
+
+  - name: Generar archivo de modulos para containerd
+    shell:
+      cmd: |
+        cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
+          overlay
+          br_netfilter
+        EOF
+
+  - name: Cargar modulos para containerd
+    command: "{{ item }}"
+    with_items:
+    - modprobe overlay
+    - modprobe br_netfilter
+
+  - name: Generar archivo de configuracion de redes para kubernetes cri
+    shell:
+      cmd: |
+        cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes-cri.conf
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.ipv4.ip_forward                 = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+        EOF
+
+  - name: Cargar parametros de configuracion de redes kubernetes
+    command: sysctl --system
+
+  - name: Instalar paquetes que permiten a apt ser usado sobre https
+    apt:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+
+  - name: Agregar una firma digital a apt para container.io
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+
+  - name: Obteniendo distribucion linux
+    command: lsb_release -sc
+    register: distribucion
+
+  - name: Agregar repositorio apt de containerd
+    apt_repository:
+      repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ distribucion.stdout }} stable
+      state: present
+
+  - name: Instalar containerd y sus dependencias
+    apt:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+      - containerd.io
+
+  - name: Reiniciar servicio containerd
+    systemd:
+      state: restarted
+      daemon_reload: yes
+      name: containerd
+
+  - name: Obteniendo archivo de configuracion containerd
+    shell: containerd config default | tee /etc/containerd/config.toml
+  
+  - name: Agregando cgroupdriver al archivo de configuracion de containerd
+    lineinfile:
+      path: /etc/containerd/config.toml
+      line: '            SystemdCgroup = true'
+      insertafter: '\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options\]'
+      
+  - name: Reiniciar servicio containerd
+    systemd:
+      state: restarted
+      daemon_reload: yes
+      name: containerd
+
+  - name: Agregar una llave digital apt para kubernetes
+    apt_key:
+      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+      state: present
+
+  - name: Agregar repositorio apt para kubernetes
+    apt_repository:
+      repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+      state: present
+      filename: kubernetes.list
+
+  - name: Instalar Binarios kubernetes
+    apt:
+      name: "{{ packages }}"
+      state: present
+      update_cache: yes
+    vars:
+      packages:
+      - kubelet
+      - kubeadm
+      - kubectl
